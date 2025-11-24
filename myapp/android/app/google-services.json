@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "452626730823",
+    "project_id": "smartexam-3e2c7",
+    "storage_bucket": "smartexam-3e2c7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:452626730823:android:98e8fd76d1aa6a64918662",
+        "android_client_info": {
+          "package_name": "com.pilani.smartexam"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "452626730823-0shnu3pm5m7r7273i8afk561kvh791e0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL5nBNSEffUnhVDZClmdsXh4nwQDq5924"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "452626730823-0shnu3pm5m7r7273i8afk561kvh791e0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
