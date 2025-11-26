@@ -12,7 +12,7 @@ const QuestionSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: ["mcq", "multiple", "truefalse", "short", "long"],
-    required: true
+    required: true,
   },
 
   // For MCQ/Multiple/TrueFalse:
