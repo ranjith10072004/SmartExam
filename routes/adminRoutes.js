@@ -1,16 +1,32 @@
 const router = require("express").Router();
-const Exam = require("../models/exam");
+const Result = require("../models/result");
 const auth = require("../middleware/auth");
 
-// Create Exam
-router.post("/exam", auth(["admin"]), async (req, res) => {
-  const exam = await Exam.create(req.body);
-  res.json(exam);
-});
+// Evaluator manually sets score
+router.post("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
+  try {
+    const { resultId } = req.params;
+    const { score } = req.body;
 
-// Get All Exams
-router.get("/exam", auth(["admin"]), async (req, res) => {
-  res.json(await Exam.find());
+    const result = await Result.findById(resultId);
+    if (!result) return res.status(404).json({ msg: "Result not found" });
+
+    result.score = score;
+    result.status = "evaluated";
+    result.evaluatedBy = req.user.id;
+    result.evaluatedAt = new Date();
+
+    await result.save();
+
+    res.json({
+      msg: "Result evaluated successfully",
+      score: result.score,
+      studentId: result.studentId,
+      examId: result.examId,
+    });
+  } catch (error) {
+    res.status(500).json({ msg: "Error", error: error.message });
+  }
 });
 
 module.exports = router;
