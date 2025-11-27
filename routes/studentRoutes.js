@@ -3,19 +3,33 @@ const Exam = require("../models/exam");
 const Result = require("../models/result");
 const auth = require("../middleware/auth");
 
-// ✅ 1. Student fetches exam (without correct answers)
+// ✅ 0. Student gets all upcoming/active exams
+router.get("/exams", auth(["student"]), async (req, res) => {
+  try {
+    const now = new Date();
+
+    const exams = await Exam.find({
+      examEndTime: { $gte: now },
+    }).select("title description examStartTime examEndTime duration");
+
+    res.json({ exams });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ 1. Student fetches exam (questions only, no answers)
 router.get("/exam/:examId", auth(["student"]), async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.examId).lean();
 
     if (!exam) return res.status(404).json({ msg: "Exam not found" });
 
-    // ❗ Remove correctAnswer before sending to student
+    // Remove correct answers before sending to student
     exam.questions = exam.questions.map((q) => ({
       questionText: q.questionText,
       type: q.type,
       options: q.options,
-      // correctAnswer removed intentionally
     }));
 
     res.json(exam);
@@ -24,7 +38,7 @@ router.get("/exam/:examId", auth(["student"]), async (req, res) => {
   }
 });
 
-// ✅ 2. Student submits exam answers → status = pending
+// ✅ 2. Student submits exam answers → pending evaluation
 router.post("/submit/:examId", auth(["student"]), async (req, res) => {
   try {
     const { examId } = req.params;

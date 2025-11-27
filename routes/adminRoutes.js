@@ -3,41 +3,57 @@ const Result = require("../models/result");
 const Exam = require("../models/exam");
 const User = require("../models/user");
 const auth = require("../middleware/auth");
+const Attendance = require("../models/attendance");
 
-// ----------------------------
-// CREATE EXAM (ADMIN ONLY)
-// POST /admin/create-exam
-// ----------------------------
+// -----------------------------------------------------
+// 1. CREATE EXAM (ADMIN)
+// -----------------------------------------------------
 router.post("/createexam", auth(["admin"]), async (req, res) => {
   try {
-    const { title, description, duration, questions } = req.body;
+    const { title, description, examStartTime, examEndTime, questions } =
+      req.body;
 
-    if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
-      return res.status(400).json({ msg: "Missing required fields: title and questions" });
+    if (
+      !title ||
+      !questions ||
+      !Array.isArray(questions) ||
+      questions.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ msg: "Missing fields: title and questions required." });
     }
+
+    const start = new Date(examStartTime);
+    const end = new Date(examEndTime);
+
+    if (isNaN(start) || isNaN(end))
+      return res.status(400).json({ msg: "Invalid date format" });
+
+    if (end <= start)
+      return res.status(400).json({ msg: "End time must be after start time" });
+
+    const duration = Math.floor((end - start) / 60000);
 
     const exam = await Exam.create({
       title,
       description: description || "",
-      duration: Number(duration) || 0,
+      examStartTime: start,
+      examEndTime: end,
+      duration,
       questions,
       createdBy: req.user.id,
     });
 
-    res.json({
-      msg: "Exam Created Successfully",
-      exam,
-    });
+    res.json({ msg: "Exam Created Successfully", exam });
   } catch (error) {
     res.status(500).json({ msg: "Server Error", error: error.message });
   }
 });
 
-
-// ----------------------------
-// 1. ADMIN: Get all pending submissions
-// GET /admin/pendingresults
-// ----------------------------
+// -----------------------------------------------------
+// 2. GET ALL PENDING RESULTS
+// -----------------------------------------------------
 router.get("/pendingresults", auth(["admin"]), async (req, res) => {
   try {
     const results = await Result.find({ status: "pending" })
@@ -50,15 +66,14 @@ router.get("/pendingresults", auth(["admin"]), async (req, res) => {
   }
 });
 
-// ----------------------------
-// 2. ADMIN: Get a single submission for evaluation
-// GET /admin/evaluate/:resultId
-// ----------------------------
+// -----------------------------------------------------
+// 3. GET SINGLE RESULT FOR EVALUATION
+// -----------------------------------------------------
 router.get("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
   try {
     const result = await Result.findById(req.params.resultId)
       .populate("studentId", "name email")
-      .populate("examId"); // contains full exam questions
+      .populate("examId");
 
     if (!result) return res.status(404).json({ msg: "Result Not Found" });
 
@@ -68,23 +83,37 @@ router.get("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
   }
 });
 
-// ----------------------------
-// 3. ADMIN: Submit evaluated score
-// POST /admin/evaluate/:resultId
-// body: { scores: [number, ...] }
-// ----------------------------
+
+
+// ADMIN — View attendance for an exam
+router.get("/attendance/:examId", auth(["admin"]), async (req, res) => {
+  try {
+    const attendance = await Attendance.find({
+      examId: req.params.examId,
+    })
+      .populate("studentId", "name email")
+      .populate("examId", "title examStartTime examEndTime");
+
+    res.json({ attendance });
+  } catch (error) {
+    res.status(500).json({ msg: "Error", error: error.message });
+  }
+});
+
+
+// -----------------------------------------------------
+// 4. SUBMIT EVALUATION SCORE
+// -----------------------------------------------------
 router.post("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
   try {
     const { scores } = req.body;
 
-    if (!Array.isArray(scores)) {
-      return res.status(400).json({ msg: "Invalid request: scores must be an array" });
-    }
+    if (!Array.isArray(scores))
+      return res.status(400).json({ msg: "Scores must be an array" });
 
     const result = await Result.findById(req.params.resultId);
     if (!result) return res.status(404).json({ msg: "Result Not Found" });
 
-    // Total marks evaluator gave
     const totalScore = scores.reduce((a, b) => Number(a) + Number(b), 0);
 
     result.score = totalScore;
@@ -103,5 +132,99 @@ router.post("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// -----------------------------------------------------
+// 5. ASSIGN EXAM TO SELECTED STUDENTS
+// -----------------------------------------------------
+router.post("/assignexam/:examId", auth(["admin"]), async (req, res) => {
+  try {
+    const { studentIds } = req.body;
+
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res
+        .status(400)
+        .json({ msg: "studentIds must be a non-empty array" });
+    }
+
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) return res.status(404).json({ msg: "Exam not found" });
+
+    // Validate users exist & are students
+    const validStudents = await User.find({
+      _id: { $in: studentIds },
+      role: "student",
+    }).select("_id");
+
+    exam.assignedTo = validStudents.map((s) => s._id);
+    await exam.save();
+
+    res.json({
+      msg: "Exam assigned successfully",
+      assignedTo: exam.assignedTo,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// -----------------------------------------------------
+// 6. ADD MORE STUDENTS TO EXISTING EXAM
+// -----------------------------------------------------
+router.patch("/addstudents/:examId", auth(["admin"]), async (req, res) => {
+  try {
+    const { studentIds } = req.body;
+
+    if (!Array.isArray(studentIds))
+      return res.status(400).json({ msg: "studentIds must be an array" });
+
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) return res.status(404).json({ msg: "Exam not found" });
+
+    const validStudents = await User.find({
+      _id: { $in: studentIds },
+      role: "student",
+    }).select("_id");
+
+    exam.assignedTo.push(...validStudents.map((s) => s._id));
+
+    // Remove duplicates
+    exam.assignedTo = [...new Set(exam.assignedTo.map((id) => id.toString()))];
+
+    await exam.save();
+
+    res.json({
+      msg: "Students added successfully",
+      assignedTo: exam.assignedTo,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/attendancereport/:examId", auth(["admin"]), async (req, res) => {
+  try {
+    const examId = req.params.examId;
+
+    const exam = await Exam.findById(examId).populate(
+      "assignedTo",
+      "name email"
+    );
+    const attendance = await Attendance.find({ examId });
+
+    const presentIds = attendance.map((a) => a.studentId.toString());
+
+    const absentStudents = exam.assignedTo.filter(
+      (s) => !presentIds.includes(s._id.toString())
+    );
+
+    res.json({
+      present: attendance,
+      absent: absentStudents,
+    });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+});
+
 
 module.exports = router;
