@@ -1,23 +1,13 @@
 class Config {
-  // Base URL for your authentication system
-  static const String baseUrl = 'https://unamusing-hypodermically-candice.ngrok-free.dev/';
-  
-  // Method to get sign-in URL based on user type
-  static String getSignInUrl(String userType) {
-    switch (userType.toLowerCase()) {
-      case 'student':
-        return '$baseUrl/student/login';
-      case 'teacher':
-        return '$baseUrl/teacher/login';
-      case 'admin':
-        return '$baseUrl/admin/login';
-      default:
-        return '$baseUrl/login';
-    }
-  }
-  
-  // You can also add other configuration methods
-  static String getSignUpUrl(String userType) {
-    return getSignInUrl(userType).replaceFirst('login', 'register');
-  }
+  // Change only this when ngrok refreshes
+  static const String ngrokBase =
+      "https://unamusing-hypodermically-candice.ngrok-free.dev";
+
+  // AUTH Endpoints (correct paths)
+  static const String loginUrl = "$ngrokBase/auth/login";
+  static const String registerUrl = "$ngrokBase/auth/register";
+  static const String createexamUrl = "$ngrokBase/admin/createexam";
+  static const String studentexamUrl = "$ngrokBase/student/exam";
+
+  static String token = "";
 }
