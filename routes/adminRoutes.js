@@ -167,9 +167,9 @@ router.post("/assignexam/:examId", auth(["admin"]), async (req, res) => {
   }
 });
 
-// -----------------------------------------------------
+
 // 6. ADD MORE STUDENTS TO EXISTING EXAM
-// -----------------------------------------------------
+
 router.patch("/addstudents/:examId", auth(["admin"]), async (req, res) => {
   try {
     const { studentIds } = req.body;
