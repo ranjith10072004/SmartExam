@@ -51,6 +51,18 @@ router.post("/createexam", auth(["admin"]), async (req, res) => {
   }
 });
 
+// GET all students for assignment
+router.get("/students", auth(["admin"]), async (req, res) => {
+  try {
+    const students = await User.find({ role: "student" })
+      .select("name email _id");
+
+    res.json({ students });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // -----------------------------------------------------
 // 2. GET ALL PENDING RESULTS
 // -----------------------------------------------------
