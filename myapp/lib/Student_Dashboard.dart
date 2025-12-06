@@ -1,156 +1,216 @@
 import 'package:flutter/material.dart';
+import 'api_service.dart';
+import 'main.dart';
+import 'student_exam_view.dart';
 
-// ---------------------------------------------------------------------------
-// THEME
-// ---------------------------------------------------------------------------
-class AppColors {
-  static const Color primary = Color(0xFF1565C0);
-  static const Color onPrimary = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFF5F5F5);
-}
-
-// ---------------------------------------------------------------------------
-// EXAM MODEL (Dummy Data)
-// ---------------------------------------------------------------------------
-class Exam {
-  final String id;
-  final String title;
-  final String description;
-  final String startTime;
-  final String endTime;
-  final int duration;
-
-  Exam({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.startTime,
-    required this.endTime,
-    required this.duration,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// DASHBOARD DEMO UI
-// ---------------------------------------------------------------------------
-class SmartExamDashboard extends StatefulWidget {
-  const SmartExamDashboard({Key? key}) : super(key: key);
+class StudentDashboard extends StatefulWidget {
+  const StudentDashboard({super.key});
 
   @override
-  _SmartExamDashboardState createState() => _SmartExamDashboardState();
+  State<StudentDashboard> createState() => _StudentDashboardState();
 }
 
-class _SmartExamDashboardState extends State<SmartExamDashboard> {
-  List<Exam> availableExams = [
-    Exam(
-      id: "1",
-      title: "Mathematics Mid-Term",
-      description: "Algebra + Geometry + Trigonometry",
-      startTime: "2025-01-10 10:00 AM",
-      endTime: "2025-01-10 11:00 AM",
-      duration: 60,
-    ),
-    Exam(
-      id: "2",
-      title: "Physics Unit Test",
-      description: "Laws of Motion + Gravitation",
-      startTime: "2025-01-11 09:00 AM",
-      endTime: "2025-01-11 09:45 AM",
-      duration: 45,
-    ),
-    Exam(
-      id: "3",
-      title: "English Grammar Test",
-      description: "Tenses + Active/Passive + Essays",
-      startTime: "2025-01-12 02:00 PM",
-      endTime: "2025-01-12 03:00 PM",
-      duration: 60,
-    ),
-  ];
+class _StudentDashboardState extends State<StudentDashboard> {
+  bool loading = true;
+  List<dynamic> exams = [];
 
-  // ---------------- NAVIGATION ----------------
-  void joinExam(String examId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Opening Exam ID: $examId")),
+  @override
+  void initState() {
+    super.initState();
+    loadExams();
+  }
+
+  void _handleLogout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
     );
   }
 
-  // ---------------- UI ----------------
+  Future<void> loadExams() async {
+    setState(() => loading = true);
+
+    final data = await ApiService.getAllExams();
+
+    setState(() {
+      exams = data;
+      loading = false;
+    });
+  }
+
+  String getExamStatus(DateTime start, DateTime end) {
+    final now = DateTime.now();
+
+    if (now.isBefore(start)) return "Upcoming";
+    if (now.isAfter(end)) return "Completed";
+    return "Live Now";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text("SmartExam Dashboard",
-            style: TextStyle(color: Colors.white)),
-        backgroundColor: AppColors.primary,
-        elevation: 0,
+        automaticallyImplyLeading: false,
+        title: const Text('Student Dashboard'),
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.notifications),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No new notifications')));
+              }),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _handleLogout),
+        ],
       ),
 
-      // ---------------- BODY ----------------
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: availableExams.length,
-        itemBuilder: (context, index) {
-          final exam = availableExams[index];
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : exams.isEmpty
+              ? const Center(child: Text("No exams available"))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: exams.length,
+                  itemBuilder: (context, index) {
+                    final exam = exams[index];
 
-          return Card(
-            elevation: 3,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.only(bottom: 18),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    exam.title,
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    exam.description,
-                    style: TextStyle(color: Colors.grey[700], fontSize: 15),
-                  ),
-                  const SizedBox(height: 10),
+                    final start = DateTime.parse(exam["examStartTime"]);
+                    final end = DateTime.parse(exam["examEndTime"]);
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Start: ${exam.startTime}",
-                              style: const TextStyle(fontSize: 13)),
-                          Text("End: ${exam.endTime}",
-                              style: const TextStyle(fontSize: 13)),
-                          Text("Duration: ${exam.duration} mins",
-                              style: const TextStyle(fontSize: 13)),
-                        ],
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
+                    final status = getExamStatus(start, end);
+
+                    return Card(
+                      elevation: 3,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              exam["title"],
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+
+                            const SizedBox(height: 6),
+                            Text(exam["description"] ?? ""),
+
+                            const SizedBox(height: 10),
+
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Duration: ${exam["duration"]} mins"),
+                                Chip(
+                                  label: Text(
+                                    status,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                  backgroundColor: status == "Upcoming"
+                                      ? Colors.blue
+                                      : status == "Live Now"
+                                          ? Colors.green
+                                          : Colors.grey,
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Start: ${start.toLocal().toString().substring(0, 16)}"),
+                                Text("End: ${end.toLocal().toString().substring(0, 16)}"),
+                              ],
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            if (status == "Live Now")
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => StudentExamView(
+                                          examId: exam["_id"].toString()),
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green),
+                                child: const Text("Start Exam"),
+                              ),
+
+                            if (status == "Upcoming")
+                              const Text(
+                                "Exam has not started yet",
+                                style: TextStyle(color: Colors.blue),
+                              ),
+
+                            if (status == "Completed")
+                              const Text(
+                                "Exam is closed",
+                                style: TextStyle(color: Colors.red),
+                              ),
+                          ],
                         ),
-                        onPressed: () => joinExam(exam.id),
-                        child: const Text("Start",
-                            style: TextStyle(color: Colors.white)),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// Navigate back to login screen 
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Login")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("You have been logged out."),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.lock),
+              label: const Text("Log Back In"),
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MyApp()),
+                );
+              },
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }

@@ -175,7 +175,7 @@ class _SignInScreenState extends State<SignInScreen>
   if (backendRole == "student") {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const SmartExamDashboard()),
+      MaterialPageRoute(builder: (_) => StudentDashboard()),
     );
   } else {
     Navigator.pushReplacement(

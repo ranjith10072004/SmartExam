@@ -7,7 +7,7 @@ class Config {
   static const String loginUrl = "$ngrokBase/auth/login";
   static const String registerUrl = "$ngrokBase/auth/register";
   static const String createexamUrl = "$ngrokBase/admin/createexam";
-  static const String studentexamUrl = "$ngrokBase/student/exam";
+  static const String studentexamUrl = "$ngrokBase/student/exams";
 
   static String token = "";
 }

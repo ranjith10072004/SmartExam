@@ -14,7 +14,7 @@ class StudentExamView extends StatefulWidget {
 class _StudentExamViewState extends State<StudentExamView> {
   Map<String, dynamic> exam = {};
   bool loading = true;
-  String errorMessage = "";
+  String errorMessage = "Exam Failed to Load";
 
   @override
   void initState() {
@@ -22,13 +22,13 @@ class _StudentExamViewState extends State<StudentExamView> {
     loadExam();
   }
 
-  // ------------------ FETCH SINGLE EXAM ------------------
+  // ------------------ FETCH EXAM BY ID ------------------
   Future<void> loadExam() async {
     final data = await ApiService.getExamById(widget.examId);
 
-    if (data["error"] != null) {
+    if (data == null || data["error"] != null) {
       setState(() {
-        errorMessage = data["error"];
+        errorMessage = data?["error"] ?? "Failed to load exam";
         loading = false;
       });
       return;
@@ -40,7 +40,6 @@ class _StudentExamViewState extends State<StudentExamView> {
     });
   }
 
-  // ------------------ UI ------------------
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -51,22 +50,28 @@ class _StudentExamViewState extends State<StudentExamView> {
 
     if (errorMessage.isNotEmpty) {
       return Scaffold(
-        body: Center(child: Text(errorMessage, style: TextStyle(fontSize: 18))),
+        body: Center(
+          child: Text(errorMessage, style: const TextStyle(fontSize: 18)),
+        ),
       );
     }
 
-    // SAFE JSON DECODING (avoids crashes)
+    // SAFE JSON READ
     final title = exam["title"] ?? "Untitled Exam";
     final description = exam["description"] ?? "";
     final duration = exam["duration"] ?? 0;
 
-    DateTime start = DateTime.now();
-    DateTime end = DateTime.now();
+    // FIX: Parse normal ISO strings: "2025-01-01T10:00:00.000Z"
+    late DateTime start;
+    late DateTime end;
 
     try {
-      start = DateTime.parse(exam["examStartTime"]["\$date"]);
-      end = DateTime.parse(exam["examEndTime"]["\$date"]);
-    } catch (_) {}
+      start = DateTime.parse(exam["examStartTime"]);
+      end = DateTime.parse(exam["examEndTime"]);
+    } catch (e) {
+      start = DateTime.now();
+      end = DateTime.now();
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -90,8 +95,8 @@ class _StudentExamViewState extends State<StudentExamView> {
             Center(
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 40, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                 ),
                 child: const Text(
                   "Start Exam",

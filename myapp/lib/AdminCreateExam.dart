@@ -143,7 +143,9 @@ class _AdminCreateExamState extends State<AdminCreateExam> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create New Exam")),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text("Create New Exam")),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.green,
         onPressed: submitExam,

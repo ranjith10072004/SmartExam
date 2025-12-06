@@ -21,11 +21,16 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
   @override
   void initState() {
     super.initState();
+
+    // Fill answers array with null values for each question
     answers = List.filled(widget.questions.length, null);
   }
 
+  // ------------------ SUBMIT ANSWERS ------------------
   Future<void> submit() async {
-    bool hasEmpty = answers.any((val) => val == null || val.toString().trim().isEmpty);
+    // VALIDATION
+    bool hasEmpty =
+        answers.any((val) => val == null || val.toString().trim().isEmpty);
 
     if (hasEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -37,6 +42,7 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
       return;
     }
 
+    // API CALL
     final res = await ApiService.submitExam(widget.examId, answers);
 
     if (res["error"] == null) {
@@ -54,6 +60,7 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
     }
   }
 
+  // ------------------ UI ------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,6 +94,7 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // QUESTION TEXT
                   Text(
                     "${index + 1}. ${q["questionText"] ?? "No Question"}",
                     style: const TextStyle(
@@ -105,7 +113,7 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
                       return RadioListTile(
                         title: Text(optionValue),
                         activeColor: Colors.blue,
-                        value: optionIndex,
+                        value: optionValue,
                         groupValue: answers[index],
                         onChanged: (val) {
                           setState(() => answers[index] = val);
@@ -150,6 +158,7 @@ class _StudentExamSubmitState extends State<StudentExamSubmit> {
         },
       ),
 
+      // SUBMIT BUTTON
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
         color: Colors.white,
