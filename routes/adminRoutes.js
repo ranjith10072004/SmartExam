@@ -51,6 +51,46 @@ router.post("/createexam", auth(["admin"]), async (req, res) => {
   }
 });
 
+//update exam
+
+router.patch("/updateexam/:examId", auth(["admin"]), async (req, res) => {
+  try {
+    const examId = req.params.examId;
+    const updates = req.body;  // contains fields to update
+
+    // Validate exam exists
+    const exam = await Exam.findById(examId);
+    if (!exam) return res.status(404).json({ msg: "Exam not found" });
+
+    // Update fields
+    Object.keys(updates).forEach((key) => {
+      exam[key] = updates[key];
+    });
+
+    await exam.save();
+
+    res.json({ msg: "Exam updated successfully", exam });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+//Get All Exams for Admin
+
+router.get("/exams", auth(["admin"]), async (req, res) => {
+  try {
+    const exams = await Exam.find().select(
+      "title description examStartTime examEndTime duration createdAt"
+    );
+
+    res.json({ exams });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET all students for assignment
 router.get("/students", auth(["admin"]), async (req, res) => {
   try {
@@ -179,39 +219,6 @@ router.post("/assignexam/:examId", auth(["admin"]), async (req, res) => {
   }
 });
 
-
-// 6. ADD MORE STUDENTS TO EXISTING EXAM
-
-router.patch("/addstudents/:examId", auth(["admin"]), async (req, res) => {
-  try {
-    const { studentIds } = req.body;
-
-    if (!Array.isArray(studentIds))
-      return res.status(400).json({ msg: "studentIds must be an array" });
-
-    const exam = await Exam.findById(req.params.examId);
-    if (!exam) return res.status(404).json({ msg: "Exam not found" });
-
-    const validStudents = await User.find({
-      _id: { $in: studentIds },
-      role: "student",
-    }).select("_id");
-
-    exam.assignedTo.push(...validStudents.map((s) => s._id));
-
-    // Remove duplicates
-    exam.assignedTo = [...new Set(exam.assignedTo.map((id) => id.toString()))];
-
-    await exam.save();
-
-    res.json({
-      msg: "Students added successfully",
-      assignedTo: exam.assignedTo,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 router.get("/attendancereport/:examId", auth(["admin"]), async (req, res) => {
   try {

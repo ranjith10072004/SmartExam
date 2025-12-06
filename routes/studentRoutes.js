@@ -29,49 +29,36 @@ router.get("/exam/:examId", auth(["student"]), async (req, res) => {
   try {
     const exam = await Exam.findOne({
       _id: req.params.examId,
-      assignedTo: req.user.id, // ensure student is assigned
+      assignedTo: req.user.id,
     }).lean();
 
-    if (!exam) {
+    if (!exam)
       return res
         .status(404)
-        .json({ msg: "Exam not found or not assigned to you" });
-    }
+        .json({ success: false, msg: "Exam not found or not assigned to you" });
 
     const now = new Date();
+    if (now < exam.examStartTime)
+      return res
+        .status(403)
+        .json({ success: false, msg: "Exam has not started yet" });
 
-    // Prevent early access
-    if (now < exam.examStartTime) {
-      return res.status(403).json({ msg: "Exam has not started yet" });
-    }
+    if (now > exam.examEndTime)
+      return res.status(403).json({ success: false, msg: "Exam time is over" });
 
-    // Prevent access after end time
-    if (now > exam.examEndTime) {
-      return res.status(403).json({ msg: "Exam time is over" });
-    }
-
-   
-    // ⭐ AUTO MARK ATTENDANCE HERE
-   
-    await Attendance.updateOne(
-      { examId: exam._id, studentId: req.user.id },
-      { examId: exam._id, studentId: req.user.id, status: "present" },
-      { upsert: true }
-    );
- 
-
-    // Remove correct answers before sending to student
+    // Remove answers
     exam.questions = exam.questions.map((q) => ({
       questionText: q.questionText,
       type: q.type,
       options: q.options,
     }));
 
-    res.json(exam);
-  } catch (error) {
-    res.status(500).json({ msg: "Error", error: error.message });
+    return res.json({ success: true, exam });
+  } catch (err) {
+    return res.status(500).json({ success: false, msg: err.message });
   }
 });
+
 
 
 // 2. STUDENT — Submit answers (only once)
