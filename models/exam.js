@@ -1,21 +1,37 @@
 const mongoose = require("mongoose");
 
+// --------------------------------------------------
+// QUESTION SCHEMA
+// --------------------------------------------------
 const QuestionSchema = new mongoose.Schema({
   questionText: { type: String, required: true },
 
-  // mcq, multiple, truefalse, short, long
+  // Question type can be subjective or optional MCQ if needed
   type: {
     type: String,
-    enum: ["mcq", "multiple", "truefalse", "short", "long"],
-    required: true,
+    enum: ["subjective", "mcq"],
+    default: "subjective",
   },
 
+  // Used only if type = mcq
   options: [{ type: String }],
 
-  // Correct answer stored but NEVER sent to student
-  correctAnswer: mongoose.Schema.Types.Mixed,
+  // Correct answer for objective questions only
+  correctAnswer: { type: mongoose.Schema.Types.Mixed, default: null },
+
+  // For subjective exams
+  allowWrittenAnswer: { type: Boolean, default: true },
+
+  // Allow file upload (pdf/jpg/png)
+  allowFileUpload: { type: Boolean, default: true },
+
+  // Optional marks weight
+  maxMarks: { type: Number, default: 10 },
 });
 
+// --------------------------------------------------
+// EXAM SCHEMA
+// --------------------------------------------------
 const ExamSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: String,
@@ -23,9 +39,8 @@ const ExamSchema = new mongoose.Schema({
   examStartTime: { type: Date, required: true },
   examEndTime: { type: Date, required: true },
 
-  // 🔥 Missing in your schema — required for duration calculation
-  duration: { type: Number, required: true },
-
+  duration: { type: Number, required: true }, // minutes
+  proctorCode: { type: String, required: true },
   questions: [QuestionSchema],
 
   assignedTo: [
@@ -43,5 +58,5 @@ const ExamSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// 🔥🔥🔥 REQUIRED: Export Model (You forgot this)
+// Export model
 module.exports = mongoose.model("Exam", ExamSchema);

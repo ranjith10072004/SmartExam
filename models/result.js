@@ -1,5 +1,31 @@
 const mongoose = require("mongoose");
 
+const AnswerSchema = new mongoose.Schema({
+  questionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+  },
+
+  // Written / typed answer
+  writtenAnswer: {
+    type: String,
+    default: "",
+  },
+
+  // Uploaded scanned answer sheets (images or PDFs)
+  fileUploads: [
+    {
+      type: String, // stores file URL: /uploads/filename.jpg
+    },
+  ],
+
+  // Evaluator marks per question
+  evaluatorScore: {
+    type: Number,
+    default: 0,
+  },
+});
+
 const ResultSchema = new mongoose.Schema({
   examId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -13,45 +39,43 @@ const ResultSchema = new mongoose.Schema({
     required: true,
   },
 
-  // Raw answers student submitted
+  // Array of per-question answers
   answers: {
-    type: Array,
+    type: [AnswerSchema],
     required: true,
   },
 
-  // Evaluator/Teacher assigned score
+  // Overall score assigned by evaluator
   score: {
     type: Number,
     default: 0,
   },
 
-  // Total questions in that exam
+  // Total questions or max marks
   totalMarks: {
     type: Number,
     required: true,
   },
 
-  // Status of evaluation
+  // Evaluation status
   status: {
     type: String,
     enum: ["pending", "evaluated"],
     default: "pending",
   },
 
-  // Which admin/evaluator graded this exam
+  // Who evaluated
   evaluatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     default: null,
   },
 
-  // When student submitted
   submittedAt: {
     type: Date,
     default: Date.now,
   },
 
-  // When evaluator graded it
   evaluatedAt: {
     type: Date,
   },
