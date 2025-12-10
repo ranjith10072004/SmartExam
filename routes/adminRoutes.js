@@ -19,11 +19,26 @@ router.post("/createexam", auth(["admin"]), async (req, res) => {
       proctorCode,
     } = req.body;
 
-    if (!proctorCode)
+    if (!title || !examStartTime || !examEndTime || !questions) {
+      return res.status(400).json({ msg: "Missing required fields" });
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res
+        .status(400)
+        .json({ msg: "Questions must be a non-empty array" });
+    }
+
+    if (!proctorCode) {
       return res.status(400).json({ msg: "Proctor Code is required" });
+    }
 
     const start = new Date(examStartTime);
     const end = new Date(examEndTime);
+
+    if (end <= start) {
+      return res.status(400).json({ msg: "End time must be after start time" });
+    }
 
     const duration = Math.floor((end - start) / 60000);
 
@@ -38,9 +53,9 @@ router.post("/createexam", auth(["admin"]), async (req, res) => {
       createdBy: req.user.id,
     });
 
-    res.json({ msg: "Exam Created Successfully", exam });
+    return res.json({ msg: "Exam Created Successfully", exam });
   } catch (error) {
-    res.status(500).json({ msg: "Server Error", error: error.message });
+    return res.status(500).json({ msg: "Server Error", error: error.message });
   }
 });
 
@@ -50,17 +65,33 @@ router.post("/createexam", auth(["admin"]), async (req, res) => {
 router.patch("/updateexam/:examId", auth(["admin"]), async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.examId);
-    if (!exam) return res.status(404).json({ msg: "Exam not found" });
+
+    if (!exam) {
+      return res.status(404).json({ msg: "Exam not found" });
+    }
+
+    // Update allowed fields only
+    const allowedFields = [
+      "title",
+      "description",
+      "examStartTime",
+      "examEndTime",
+      "questions",
+      "proctorCode",
+      "assignedTo",
+    ];
 
     Object.keys(req.body).forEach((key) => {
-      exam[key] = req.body[key];
+      if (allowedFields.includes(key)) {
+        exam[key] = req.body[key];
+      }
     });
 
     await exam.save();
 
-    res.json({ msg: "Exam updated successfully", exam });
+    return res.json({ msg: "Exam updated successfully", exam });
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    return res.status(500).json({ msg: error.message });
   }
 });
 
@@ -72,9 +103,10 @@ router.get("/exams", auth(["admin"]), async (req, res) => {
     const exams = await Exam.find().select(
       "title description examStartTime examEndTime duration createdAt"
     );
-    res.json({ exams });
+
+    return res.json({ exams });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -86,12 +118,12 @@ router.get("/students", auth(["admin"]), async (req, res) => {
     const students = await User.find({ role: "student" }).select(
       "name email _id"
     );
-    res.json({ students });
+
+    return res.json({ students });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
-
 
 // -----------------------------------------------------
 // 6. GET PENDING RESULTS (FOR EVALUATION)
@@ -102,9 +134,9 @@ router.get("/pendingresults", auth(["admin"]), async (req, res) => {
       .populate("studentId", "name email")
       .populate("examId", "title");
 
-    res.json({ results });
+    return res.json({ results });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -117,11 +149,13 @@ router.get("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
       .populate("studentId", "name email")
       .populate("examId");
 
-    if (!result) return res.status(404).json({ msg: "Result not found" });
+    if (!result) {
+      return res.status(404).json({ msg: "Result not found" });
+    }
 
-    res.json(result);
+    return res.json(result);
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    return res.status(500).json({ msg: error.message });
   }
 });
 
@@ -132,11 +166,15 @@ router.post("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
   try {
     const { scores } = req.body;
 
-    if (!Array.isArray(scores))
-      return res.status(400).json({ msg: "Scores must be an array" });
+    if (!Array.isArray(scores) || scores.length === 0) {
+      return res.status(400).json({ msg: "Scores must be a non-empty array" });
+    }
 
     const result = await Result.findById(req.params.resultId);
-    if (!result) return res.status(404).json({ msg: "Result Not Found" });
+
+    if (!result) {
+      return res.status(404).json({ msg: "Result Not Found" });
+    }
 
     const totalScore = scores.reduce((a, b) => Number(a) + Number(b), 0);
 
@@ -147,13 +185,13 @@ router.post("/evaluate/:resultId", auth(["admin"]), async (req, res) => {
 
     await result.save();
 
-    res.json({
+    return res.json({
       msg: "Evaluation Completed",
       totalScore,
       resultId: result._id,
     });
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    return res.status(500).json({ msg: error.message });
   }
 });
 
@@ -168,9 +206,9 @@ router.get("/attendance/:examId", auth(["admin"]), async (req, res) => {
       .populate("studentId", "name email")
       .populate("examId", "title examStartTime examEndTime");
 
-    res.json({ attendance });
+    return res.json({ attendance });
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    return res.status(500).json({ msg: error.message });
   }
 });
 
@@ -184,6 +222,10 @@ router.get("/attendancereport/:examId", auth(["admin"]), async (req, res) => {
       "name email"
     );
 
+    if (!exam) {
+      return res.status(404).json({ msg: "Exam not found" });
+    }
+
     const attendance = await Attendance.find({ examId: req.params.examId });
 
     const presentIds = attendance.map((a) => a.studentId.toString());
@@ -192,12 +234,12 @@ router.get("/attendancereport/:examId", auth(["admin"]), async (req, res) => {
       (s) => !presentIds.includes(s._id.toString())
     );
 
-    res.json({
+    return res.json({
       present: attendance,
       absent: absentStudents,
     });
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    return res.status(500).json({ msg: error.message });
   }
 });
 
