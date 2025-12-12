@@ -1,17 +1,17 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'Config.dart';
+import 'config.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // ================= GET TOKEN =================
+  // ================= HELPERS =====================
   static Future<String> getToken() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString("token") ?? "";
   }
 
-  // ================= CHECK JSON =================
   static bool _isJsonResponse(String body) {
     try {
       jsonDecode(body);
@@ -21,10 +21,17 @@ class ApiService {
     }
   }
 
-  // ================= REGISTER =================
+  static Map<String, String> _defaultHeaders(String token) {
+    return {
+      "Authorization": "Bearer $token",
+      "Content-Type": "application/json",
+    };
+  }
+
+  // ================= REGISTER =====================
   static Future<Map<String, dynamic>> register(
       String name, String email, String password, String role) async {
-    final url = Uri.parse(Config.registerUrl);
+    final url = Uri.parse("${Config.baseUrl}/register");
 
     try {
       final response = await http.post(
@@ -48,7 +55,7 @@ class ApiService {
     }
   }
 
-  // ================= LOGIN =================
+  // ================= LOGIN ======================
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     final url = Uri.parse(Config.loginUrl);
@@ -60,7 +67,9 @@ class ApiService {
         body: jsonEncode({"email": email, "password": password}),
       );
 
-      if (!_isJsonResponse(res.body)) return {"error": "Invalid response"};
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid response"};
+      }
 
       final data = jsonDecode(res.body);
 
@@ -75,7 +84,7 @@ class ApiService {
     }
   }
 
-  // ================= CREATE EXAM =================
+  // ================= CREATE EXAM ======================
   static Future<Map<String, dynamic>> createExam(
       Map<String, dynamic> examData) async {
     final token = await getToken();
@@ -84,10 +93,7 @@ class ApiService {
     try {
       final res = await http.post(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+        headers: _defaultHeaders(token),
         body: jsonEncode(examData),
       );
 
@@ -101,299 +107,300 @@ class ApiService {
     }
   }
 
-  // ================= GET EXAM BY ID =================
-  static Future<Map<String, dynamic>> getExamById(String examId) async {
+  // ================= GET EXAM BY ID ======================
+  static Future<Map<String, dynamic>> getExamById(
+    String examId, {
+    String? proctorCode,
+  }) async {
     final token = await getToken();
 
+    final uri = Uri.parse("${Config.baseUrl}/student/exam/$examId")
+        .replace(queryParameters: {
+      if (proctorCode != null && proctorCode.isNotEmpty)
+        "proctorCode": proctorCode
+    });
+
     try {
-      final res = await http.get(
-        Uri.parse("${Config.studentexamUrl}$examId"),
-        headers: {"Authorization": "Bearer $token"},
-      );
+      final res = await http
+          .get(uri, headers: _defaultHeaders(token))
+          .timeout(const Duration(seconds: 15));
+
+      print("DEBUG: GET $uri -> ${res.statusCode}");
+      print("DEBUG: Response: ${res.body}");
 
       if (!_isJsonResponse(res.body)) {
-        return {"error": "Server returned non-JSON response"};
+        return {"error": "Invalid server response"};
       }
+      final decoded = jsonDecode(res.body);
 
-      return jsonDecode(res.body);
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(decoded);
+      } else {
+        return {"error": decoded["msg"] ?? "Failed to load exam"};
+      }
     } catch (e) {
-      return {"error": "Failed to fetch exam: $e"};
+      return {"error": "Exception: $e"};
     }
   }
 
-  // ================= SUBMIT EXAM =================
-  static Future<Map<String, dynamic>> submitExam(
-      String examId, List answers) async {
+  // ================= VERIFY PROCTOR CODE ====================
+  static Future<Map<String, dynamic>> verifyProctorCode(
+      String examId, String proctorCode) async {
     final token = await getToken();
 
+    final uri = Uri.parse("${Config.baseUrl}/student/verify-proctor/$examId");
+
     try {
-      final res = await http.post(
-        Uri.parse("${Config.ngrokBase}/student/submit/$examId"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode({"answers": answers}),
-      );
+      final res = await http
+          .post(uri,
+              headers: _defaultHeaders(token),
+              body: jsonEncode({"proctorCode": proctorCode}))
+          .timeout(const Duration(seconds: 15));
 
       if (!_isJsonResponse(res.body)) {
-        return {"error": "Server returned non-JSON response"};
+        return {"success": false, "error": "Invalid server response"};
       }
 
-      return jsonDecode(res.body);
-    } catch (e) {
-      return {"error": "Submission failed: $e"};
-    }
-  }
-
-  // ================= GET ALL EXAMS (STUDENT) =================
-  static Future<List<dynamic>> getAllExams() async {
-  try {
-    final token = await getToken();
-
-    final res = await http.get(
-      Uri.parse(Config.studentexamUrl),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      },
-    );
-
-    if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
 
-      if (data is Map && data["exams"] is List) {
-        return data["exams"];
-      }
-
-      return []; // unexpected format
-    }
-
-    print("EXAM LOAD FAILED: ${res.statusCode}: ${res.body}");
-    return [];
-  } catch (e) {
-    print("EXAM LOAD ERROR: $e");
-    return [];
-  }
-}
-
-  // ---------------- Admin: get all exams (for evaluator)
-  static Future<List<dynamic>> getAdminExams() async {
-    try {
-      final token = await getToken();
-      final url = Uri.parse("${Config.ngrokBase}/admin/exams");
-      final res = await http.get(url, headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      });
-
-      if (!_isJsonResponse(res.body)) {
-        return [];
-      }
-      final data = jsonDecode(res.body);
-      // assume { exams: [...] } or return the array directly
-      if (data is Map && data['exams'] != null) return List.from(data['exams']);
-      if (data is List) return data;
-      return [];
-    } catch (e) {
-      print("getAdminExams error: $e");
-      return [];
-    }
-  }
-
-  // ---------------- Admin: update exam
-  static Future<Map<String, dynamic>> updateExam(String examId, Map body) async {
-  try {
-    final token = await getToken();
-    final url = Uri.parse("${Config.ngrokBase}/admin/updateexam/$examId");
-
-    final res = await http.patch(
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(body),
-    );
-
-    print("UPDATE STATUS: ${res.statusCode}");
-    print("UPDATE BODY RAW: '${res.body}'");
-
-    if (!_isJsonResponse(res.body)) {
-      return {"error": "Invalid response", "raw": res.body};
-    }
-
-    return jsonDecode(res.body);
-  } catch (e) {
-    return {"error": "Network error: $e"};
-  }
-}
-
-  // ---------------- Admin: delete exam
-  static Future<Map<String, dynamic>> deleteExam(String examId) async {
-    try {
-      final token = await getToken();
-      final url = Uri.parse("${Config.ngrokBase}/admin/exams/$examId");
-      final res = await http.delete(url, headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      });
-      if (!_isJsonResponse(res.body)) return {"error": "Invalid response"};
-      return jsonDecode(res.body);
-    } catch (e) {
-      return {"error": "Network error: $e"};
-    }
-  }
-
-  // ---------------- Admin: students list
-  static Future<List<dynamic>> getAllStudents() async {
-    try {
-      final token = await getToken();
-      final url = Uri.parse("${Config.ngrokBase}/admin/students");
-      final res = await http.get(url, headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      });
-      if (!_isJsonResponse(res.body)) return [];
-      final data = jsonDecode(res.body);
-      if (data is Map && data['students'] != null) return List.from(data['students']);
-      if (data is List) return data;
-      return [];
-    } catch (e) {
-      print("getAllStudents error: $e");
-      return [];
-    }
-  }
-
-  // ---------------- Admin: assign exam to student
-static Future<Map<String, dynamic>> assignExamToStudent(
-    String examId, List<String> studentIds) async {
-  try {
-    final token = await getToken();
-
-    final url = Uri.parse("${Config.ngrokBase}/admin/assignexam/$examId");
-
-    final res = await http.post(
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      },
-      body: jsonEncode({"studentIds": studentIds}),
-    );
-
-    print("ASSIGN STATUS: ${res.statusCode}");
-    print("ASSIGN RESPONSE: ${res.body}");
-
-    if (res.statusCode != 200) {
-      return {"error": "Failed", "raw": res.body};
-    }
-
-    return jsonDecode(res.body);
-  } catch (e) {
-    return {"error": e.toString()};
-  }
-}
-
-
-  // ---------------- Admin: unassign
-  static Future<Map<String, dynamic>> unassignExamFromStudent(
-    String examId, List<String> studentIds) async {
-  try {
-    final token = await getToken();
-    final url = Uri.parse("${Config.ngrokBase}/admin/unassignexam/$examId");
-
-    final res = await http.post(
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token"
-      },
-      body: jsonEncode({"studentIds": studentIds}),
-    );
-
-    return jsonDecode(res.body);
-  } catch (e) {
-    return {"error": e.toString()};
-  }
-}
-
-//Student writing exam
-
-static Future<Map<String, dynamic>> getStudentExam(String examId) async {
-  try {
-    final token = await getToken();
-    
-    // 1. EARLY EXIT CHECK: Ensure token is present
-    if (token == null || token.isEmpty) {
-      print("❌ TOKEN MISSING. Exiting.");
-      return {"success": false, "error": "Token missing. Please login again."};
-    }
-
-    final url = Uri.parse("${Config.ngrokBase}/student/exam/$examId");
-    print("🌍 ATTEMPTING TO FETCH URL: $url"); // Log the exact URL being called
-
-    final res = await http.get(
-      url,
-      headers: {
-        "Authorization": "Bearer $token",
-        // Content-Type is optional for GET requests, but harmless.
-        "Content-Type": "application/json", 
-      },
-    );
-
-    // --- LOG RESPONSE DETAILS ---
-    print("✅ EXAM FETCH STATUS: ${res.statusCode}");
-    print("📝 EXAM FETCH RAW: ${res.body}");
-
-    // 2. NON-JSON CHECK: If the body is clearly not JSON (e.g., HTML error page)
-    if (!_isJsonResponse(res.body)) {
-      print("❌ Non-JSON Response Detected. Likely a 404/500 HTML page.");
       return {
-        "success": false,
-        "error": "Unexpected server response (Code ${res.statusCode}). Check Ngrok/Backend routing.",
-        "raw": res.body,
+        "success": res.statusCode == 200 &&
+            (data["success"] == true || data["status"] == "ok"),
+        "data": data,
       };
+    } catch (e) {
+      return {"success": false, "error": e.toString()};
     }
+  }
 
-    final decoded = jsonDecode(res.body);
+  // ================= SUBMIT FINAL EXAM ======================
+  static Future<Map<String, dynamic>> submitExam(
+      String examId, List<Map<String, dynamic>> answers) async {
+    final token = await getToken();
 
-    // 3. SUCCESS CASE (Status 200-299)
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      // Check for the expected data structure within the successful response
-      if (decoded["exam"] != null) {
+    final uri = Uri.parse("${Config.baseUrl}/student/submit/$examId");
+
+    try {
+      final res = await http
+          .post(uri,
+              headers: _defaultHeaders(token),
+              body: jsonEncode({"answers": answers}))
+          .timeout(const Duration(seconds: 20));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"success": false, "error": "Invalid server response"};
+      }
+
+      final decoded = jsonDecode(res.body);
+
+      if (res.statusCode == 200) {
         return {
           "success": true,
-          "exam": decoded["exam"],
-        };
-      } else {
-        // Successful status code, but data is missing/malformed.
-        print("⚠️ 200 OK, but 'exam' field is missing in JSON.");
-        return {
-          "success": false,
-          "error": "Server returned success but missing required 'exam' data.",
+          "message": decoded["msg"] ?? "Submitted successfully"
         };
       }
+
+      return {"success": false, "error": decoded["msg"] ?? "Submit failed"};
+    } catch (e) {
+      return {"success": false, "error": e.toString()};
+    }
+  }
+
+  // ============================================================
+  //                     ADMIN FUNCTIONS
+  // ============================================================
+
+  // ================= GET ADMIN EXAMS ======================
+  static Future<Map<String, dynamic>> getAdminExams() async {
+    final token = await getToken();
+    final uri = Uri.parse("${Config.baseUrl}/admin/exams");
+
+    try {
+      final res = await http.get(uri, headers: _defaultHeaders(token));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid server response", "exams": []};
+      }
+
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {"error": e.toString(), "exams": []};
+    }
+  }
+
+  // ================= DELETE EXAM ======================
+  static Future<Map<String, dynamic>> deleteExam(String id) async {
+    final token = await getToken();
+
+    final uri = Uri.parse("${Config.baseUrl}/admin/exam/$id");
+
+    try {
+      final res = await http.delete(uri, headers: _defaultHeaders(token));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid server response"};
+      }
+
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {"error": e.toString()};
+    }
+  }
+
+  static Map<String, String> defaultHeaders(String token) {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer $token",
+  };
+}
+
+  // ================= UPDATE EXAM ======================
+  static Future<Map<String, dynamic>> updateExam(
+      String examId, Map<String, dynamic> data) async {
+    final token = await getToken();
+
+    final uri = Uri.parse("${Config.baseUrl}/admin/updateexam/$examId");
+
+    try {
+      final res = await http.put(uri,
+          headers: _defaultHeaders(token), body: jsonEncode(data));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid server response"};
+      }
+
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {"error": e.toString()};
+    }
+  }
+
+  // ===============EXAM DETAILS (ADMIN)==============================
+
+  static Future<Map<String, dynamic>> getExamByIdAdmin(String examId) async {
+  final token = await getToken();
+  final uri = Uri.parse("${Config.baseUrl}/admin/exam/$examId");
+
+  try {
+    final res = await http.get(uri, headers: _defaultHeaders(token));
+    if (!_isJsonResponse(res.body)) return {};
+    return jsonDecode(res.body);
+  } catch (e) {
+    return {};
+  }
+  }
+
+  // ============== STUDENT DETAILS =======================
+
+  static Future<Map<String, dynamic>> getStudentById(String studentId) async {
+  final token = await getToken();
+  final uri = Uri.parse("${Config.baseUrl}/admin/student/$studentId");
+
+  try {
+    final res = await http.get(uri, headers: _defaultHeaders(token));
+    if (!_isJsonResponse(res.body)) return {};
+    return jsonDecode(res.body);
+  } catch (e) {
+    return {};
+  }
+  }
+
+  // ================= GET ALL STUDENTS ======================
+static Future<Map<String, dynamic>> getAllStudents() async {
+  final token = await getToken();
+  final uri = Uri.parse("${Config.baseUrl}/admin/students");
+
+  try {
+    final res = await http.get(uri, headers: _defaultHeaders(token));
+
+    if (!_isJsonResponse(res.body)) {
+      return {"error": "Invalid server response", "students": []};
     }
 
-    // 4. CLIENT/SERVER ERROR CASE (Status 4xx, 5xx)
-    // Assumes the 4xx/5xx errors return a JSON object with a 'msg' or 'error' field.
-    return {
-      "success": false,
-      "error": decoded["msg"] ?? decoded["error"] ?? "Error ${res.statusCode}: Failed to load exam",
-      "raw": res.body, // Include raw body for inspection
-    };
-
-  } on SocketException catch (e) {
-    // This catches network errors (e.g., No Internet, Ngrok URL unreachable)
-    print("🚨 NETWORK ERROR: SocketException: $e");
-    return {"success": false, "error": "Connection failed. Check your network or Ngrok tunnel status."};
+    return jsonDecode(res.body);
   } catch (e) {
-    // This catches all other unhandled errors (e.g., FormatException from jsonDecode, etc.)
-    print("💣 UNHANDLED CATCH ERROR: $e"); 
-    return {"success": false, "error": "An unexpected error occurred: ${e.toString()}"};
+    return {"error": e.toString(), "students": []};
   }
 }
+
+
+  // ================= UPLOAD ANSWER FILE =================
+static Future<Map<String, dynamic>> uploadAnswer({
+  required String examId,
+  required String questionId,
+  required File file,
+}) async {
+  final token = await getToken();
+
+  final uri = Uri.parse(
+      "${Config.baseUrl}/student/upload-answer/$examId/$questionId");
+
+  try {
+    final request = http.MultipartRequest("POST", uri);
+    request.headers["Authorization"] = "Bearer $token";
+
+    request.files.add(
+      await http.MultipartFile.fromPath("file", file.path),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    print("UPLOAD STATUS: ${response.statusCode}");
+    print("UPLOAD BODY: ${response.body}");
+
+    if (response.statusCode == 200) {
+      return {"success": true, "data": jsonDecode(response.body)};
+    } else {
+      return {"success": false, "error": response.body};
+    }
+  } catch (e) {
+    return {"success": false, "error": e.toString()};
+  }
 }
 
- 
+  // ================= ASSIGN EXAM TO STUDENT ======================
+  static Future<Map<String, dynamic>> assignExamToStudent(
+      String examId, List<String> studentIds) async {
+    final token = await getToken();
+
+    final uri = Uri.parse("${Config.baseUrl}/admin/exam/$examId/assign");
+
+    try {
+      final res = await http.post(uri,
+          headers: _defaultHeaders(token),
+          body: jsonEncode({"studentIds": studentIds}));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid server response"};
+      }
+
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {"error": e.toString()};
+    }
+  }
+
+  // ================= UNASSIGN EXAM FROM STUDENT ======================
+  static Future<Map<String, dynamic>> unassignExamFromStudent(
+      String examId, List<String> studentIds) async {
+    final token = await getToken();
+
+    final uri =
+        Uri.parse("${Config.baseUrl}/admin/exam/$examId/unassign");
+
+    try {
+      final res = await http.post(uri,
+          headers: _defaultHeaders(token),
+          body: jsonEncode({"studentIds": studentIds}));
+
+      if (!_isJsonResponse(res.body)) {
+        return {"error": "Invalid server response"};
+      }
+
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {"error": e.toString()};
+    }
+  }
+}
