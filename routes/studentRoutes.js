@@ -224,6 +224,40 @@ router.post("/submit/:examId", auth(["student"]), async (req, res) => {
   }
 });
 
+// -----------------------------------------------------
+// STUDENT — VIEW ALL RESULTS
+// -----------------------------------------------------
+router.get("/results", auth(["student"]), async (req, res) => {
+  try {
+    const results = await Result.find({ studentId: req.user.id })
+      .populate("examId", "title examStartTime examEndTime")
+      .select("score status totalMarks evaluatedAt");
+
+    return res.json({ success: true, results });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+});
+
+// -----------------------------------------------------
+// STUDENT — VIEW RESULT FOR A SINGLE EXAM
+// -----------------------------------------------------
+router.get("/result/:examId", auth(["student"]), async (req, res) => {
+  try {
+    const result = await Result.findOne({
+      examId: req.params.examId,
+      studentId: req.user.id,
+    }).populate("examId", "title");
+
+    if (!result) {
+      return res.status(404).json({ success: false, msg: "No result found" });
+    }
+
+    return res.json({ success: true, result });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+});
 
 
 
