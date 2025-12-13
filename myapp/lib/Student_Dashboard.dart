@@ -4,200 +4,144 @@ import 'package:http/http.dart' as http;
 import 'api_service.dart';
 import 'Config.dart';
 import 'ProctorCode.dart';
- 
+import 'student_results_page.dart';
+
 class StudentDashboard extends StatefulWidget {
   @override
   State<StudentDashboard> createState() => _StudentDashboardState();
 }
- 
-class _StudentDashboardState extends State<StudentDashboard> {
+
+class _StudentDashboardState extends State<StudentDashboard>
+    with SingleTickerProviderStateMixin {
   List<dynamic> exams = [];
-  bool loading = true;
+  bool loadingExams = true;
+
+  late TabController _tabController;
+
+  String? token;               // <-- FIX 1: store token
+  bool tokenLoaded = false;    // <-- FIX 2
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+
+    loadToken();
     loadExams();
   }
 
-  // ---------------------------------------------------
-  // FETCH STUDENT EXAMS
-  // ---------------------------------------------------
+  Future<void> loadToken() async {
+    token = await ApiService.getToken();
+    setState(() => tokenLoaded = true); // <-- allow Results tab to load
+  }
 
   Future<void> loadExams() async {
-    final token = await ApiService.getToken();
+    final t = await ApiService.getToken();
     final url = Uri.parse("${Config.baseUrl}/student/exams");
+
     try {
       final response = await http.get(
         url,
         headers: {
-          "Authorization": "Bearer $token",
+          "Authorization": "Bearer $t",
           "Content-Type": "application/json",
         },
       );
-      print("EXAMS LOAD STATUS: ${response.statusCode}");
-      print("EXAMS LOAD BODY: ${response.body}");
+
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200 && data["success"] == true) {
+
+      if (data["success"] == true) {
         setState(() {
           exams = data["exams"];
-          loading = false;
+          loadingExams = false;
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data["msg"] ?? "Failed to load exams")),
-        );
-        setState(() => loading = false);
+        loadingExams = false;
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error: $e")));
-      setState(() => loading = false);
+      loadingExams = false;
     }
   }
-  // ---------------------------------------------------
-  // UI
-  // ---------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-
       appBar: AppBar(
-
-        title: Text("Student Dashboard"),
-
+        title: const Text("Student Dashboard"),
         backgroundColor: Colors.blueAccent,
-
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: "Exams"),
+            Tab(text: "My Results"),
+          ],
+        ),
       ),
- 
-      body: loading
 
-          ? Center(child: CircularProgressIndicator())
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // ----------- TAB 1: Exams --------------------
+          loadingExams
+              ? const Center(child: CircularProgressIndicator())
+              : buildExamList(),
 
-          : exams.isEmpty
-
-              ? Center(
-
-                  child: Text(
-
-                    "No exams available.",
-
-                    style: TextStyle(fontSize: 18),
-
-                  ),
-
-                )
-
-              : ListView.builder(
-
-                  padding: EdgeInsets.all(16),
-
-                  itemCount: exams.length,
-
-                  itemBuilder: (context, index) {
-
-                    final exam = exams[index];
- 
-                    return Card(
-
-                      elevation: 3,
-
-                      margin: EdgeInsets.only(bottom: 15),
-
-                      child: Padding(
-
-                        padding: EdgeInsets.all(16),
-
-                        child: Column(
-
-                          crossAxisAlignment: CrossAxisAlignment.start,
-
-                          children: [
-
-                            Text(
-
-                              exam["title"],
-
-                              style: TextStyle(
-
-                                  fontSize: 20, fontWeight: FontWeight.bold),
-
-                            ),
-
-                            SizedBox(height: 6),
- 
-                            Text(exam["description"] ?? ""),
- 
-                            SizedBox(height: 10),
-
-                            Text(
-
-                              "Start: ${exam['examStartTime']}",
-
-                              style: TextStyle(color: Colors.grey[700]),
-
-                            ),
-
-                            Text(
-
-                              "End: ${exam['examEndTime']}",
-
-                              style: TextStyle(color: Colors.grey[700]),
-
-                            ),
- 
-                            SizedBox(height: 12),
- 
-                            ElevatedButton(
-
-                              style: ElevatedButton.styleFrom(
-
-                                backgroundColor: Colors.green,
-
-                                padding: EdgeInsets.symmetric(vertical: 12),
-
-                              ),
-
-                              child: Text("Start Exam"),
-
-                              onPressed: () {
-
-                                Navigator.push(
-
-                                  context,
-
-                                  MaterialPageRoute(
-
-                                    builder: (_) => ProctorCodeScreen(
-
-                                      examId: exam["_id"],
-
-                                    ),
-
-                                  ),
-
-                                );
-
-                              },
-
-                            ),
-
-                          ],
-
-                        ),
-
-                      ),
-
-                    );
-
-                  },
-
-                ),
-
+          // ----------- TAB 2: Results -------------------
+          tokenLoaded
+              ? StudentResultsPage(token: token!)
+              : const Center(child: CircularProgressIndicator()),
+        ],
+      ),
     );
-
   }
 
-}
+  Widget buildExamList() {
+    if (exams.isEmpty) {
+      return const Center(child: Text("No exams available"));
+    }
 
- 
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: exams.length,
+      itemBuilder: (context, index) {
+        final exam = exams[index];
+
+        return Card(
+          elevation: 3,
+          margin: const EdgeInsets.only(bottom: 15),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  exam["title"],
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(exam["description"] ?? ""),
+                const SizedBox(height: 10),
+                Text("Start: ${exam['examStartTime']}"),
+                Text("End: ${exam['examEndTime']}"),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ProctorCodeScreen(examId: exam["_id"]),
+                      ),
+                    );
+                  },
+                  child: const Text("Start Exam"),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
